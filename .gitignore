@@ -1,0 +1,4 @@
+/target
+conf/defaults.toml
+aider.sh
+.aider*

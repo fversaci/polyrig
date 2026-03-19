@@ -1,0 +1,10 @@
+id_whitelist = []
+
+# Optional: override default transcription model (OpenRouter)
+# transcription_model = "openai/gpt-4o-mini-transcribe"
+
+# Optional: override default TTS model (OpenRouter)
+# tts_model = "openai/gpt-4o-mini-tts-2025-12-15"
+
+# Optional: override default TTS voice (varies by model)
+# tts_voice = "marin"

@@ -1,0 +1,31 @@
+[package]
+name = "polyrig"
+license = "AGPL-3.0"
+version = "0.1.0"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.102"
+async-openai = { version = "0.38.1", features = ["audio", "audio-types"] }
+async-stream = "0.3.6"
+chrono = { version = "0.4.44", default-features = false, features = ["clock"]  }
+clap = { version = "4.6.1", features = ["derive"] }
+futures-util = "0.3.32"
+env_logger = "0.11.10"
+log = "0.4.29"
+pretty_env_logger = "0.5.0"
+rand = "0.10.1"
+rig-core = { version = "0.37.0", features = ["audio"] }
+rustyline = "18.0.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+strum = "0.28.0"
+strum_macros = "0.28.0"
+subtp = "0.2.0"
+teloxide = { version = "0.17.0", features = ["macros"] }
+tokio = { version = "1.52.3", features = ["full", "macros", "rt-multi-thread"] }
+tokio-stream = "0.1.18"
+toml = "1.1.2"
+termimad = "0.31"
