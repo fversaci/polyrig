@@ -402,6 +402,7 @@ async fn start_talk(
                 transcription_model: my_state.transcription_model.clone(),
                 tts_model: my_state.tts_model.clone(),
                 tts_voice: my_state.tts_voice.clone(),
+                tts_format: my_state.tts_format.clone(),
             },
             talk,
         })
@@ -497,30 +498,72 @@ async fn do_talk_voice_with_dialogue(
     do_talk(bot, dialogue, my_state, user_message, talk).await
 }
 
+/// Builds a WAV header for 16-bit mono PCM audio at the given sample rate.
+fn wav_header(data_len: usize, sample_rate: u32) -> Vec<u8> {
+    let bits_per_sample: u16 = 16;
+    let num_channels: u16 = 1;
+    let byte_rate = sample_rate * u32::from(num_channels) * u32::from(bits_per_sample) / 8;
+    let block_align = num_channels * bits_per_sample / 8;
+    let data_size = data_len as u32;
+    let chunk_size = 36 + data_size;
+
+    let mut hdr = Vec::with_capacity(44);
+    hdr.extend_from_slice(b"RIFF");
+    hdr.extend_from_slice(&chunk_size.to_le_bytes());
+    hdr.extend_from_slice(b"WAVE");
+    hdr.extend_from_slice(b"fmt ");
+    hdr.extend_from_slice(&16u32.to_le_bytes()); // subchunk1 size
+    hdr.extend_from_slice(&1u16.to_le_bytes());  // PCM
+    hdr.extend_from_slice(&num_channels.to_le_bytes());
+    hdr.extend_from_slice(&sample_rate.to_le_bytes());
+    hdr.extend_from_slice(&byte_rate.to_le_bytes());
+    hdr.extend_from_slice(&block_align.to_le_bytes());
+    hdr.extend_from_slice(&bits_per_sample.to_le_bytes());
+    hdr.extend_from_slice(b"data");
+    hdr.extend_from_slice(&data_size.to_le_bytes());
+    hdr
+}
+
 /// Generates audio from text using OpenRouter TTS and sends it as a voice message.
-async fn send_voice_reply(bot: Bot, chat_id: ChatId, text: &str, tts_model: &str, tts_voice: &str) {
+/// `tts_format` is "mp3" or "pcm" — determines the response format and output file type.
+async fn send_voice_reply(
+    bot: Bot,
+    chat_id: ChatId,
+    text: &str,
+    tts_model: &str,
+    tts_voice: &str,
+    tts_format: &str,
+) {
     if text.trim().is_empty() {
         return;
     }
     let text = text.to_string();
     let tts_model = tts_model.to_string();
     let tts_voice = tts_voice.to_string();
+    let tts_format = tts_format.to_string();
+    let is_pcm = tts_format == "pcm";
     let tts_result = tokio::spawn(async move {
         let openrouter_client = openrouter::Client::from_env()
             .map_err(|e| AudioGenerationError::RequestError(Box::new(e)))?;
         let tts = openrouter_client.audio_generation_model(&tts_model);
-        tts.audio_generation_request()
-            .text(&text)
-            .voice(&tts_voice)
-            .send()
-            .await
-            .map(|r| r.audio)
+        let mut req = tts.audio_generation_request().text(&text).voice(&tts_voice);
+        if is_pcm {
+            req = req.additional_params(serde_json::json!({"response_format": "pcm"}));
+        }
+        req.send().await.map(|r| r.audio)
     })
     .await;
 
     match tts_result {
         Ok(Ok(audio_data)) => {
-            let voice_file = InputFile::memory(audio_data).file_name("reply.mp3");
+            let voice_file = if is_pcm {
+                // Gemini TTS returns raw PCM (16-bit, 24000 Hz, mono); wrap in WAV header.
+                let mut wav = wav_header(audio_data.len(), 24000);
+                wav.extend_from_slice(&audio_data);
+                InputFile::memory(wav).file_name("reply.wav")
+            } else {
+                InputFile::memory(audio_data).file_name("reply.mp3")
+            };
             if let Err(e) = bot.send_voice(chat_id, voice_file).await {
                 log::error!("Failed to send voice reply: {}", e);
             }
@@ -570,6 +613,7 @@ async fn do_talk(
             &response,
             &my_state.tts_model,
             &my_state.tts_voice,
+            &my_state.tts_format,
         )
         .await;
     }
@@ -586,6 +630,7 @@ async fn do_talk(
                 transcription_model: my_state.transcription_model.clone(),
                 tts_model: my_state.tts_model.clone(),
                 tts_voice: my_state.tts_voice.clone(),
+                tts_format: my_state.tts_format.clone(),
             },
             talk,
         })
