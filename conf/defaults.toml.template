@@ -11,3 +11,6 @@ id_whitelist = []
 
 # Optional: TTS response format ("mp3" or "pcm"). Use "pcm" for Gemini TTS models.
 # tts_format = "mp3"
+
+# Optional: maximum output tokens for TTS generation.
+# max_tts_tokens = 10000

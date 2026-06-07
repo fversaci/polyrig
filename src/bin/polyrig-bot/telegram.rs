@@ -403,6 +403,7 @@ async fn start_talk(
                 tts_model: my_state.tts_model.clone(),
                 tts_voice: my_state.tts_voice.clone(),
                 tts_format: my_state.tts_format.clone(),
+                max_tts_tokens: my_state.max_tts_tokens,
             },
             talk,
         })
@@ -533,6 +534,7 @@ async fn send_voice_reply(
     tts_model: &str,
     tts_voice: &str,
     tts_format: &str,
+    max_tts_tokens: u64,
 ) {
     if text.trim().is_empty() {
         return;
@@ -547,9 +549,12 @@ async fn send_voice_reply(
             .map_err(|e| AudioGenerationError::RequestError(Box::new(e)))?;
         let tts = openrouter_client.audio_generation_model(&tts_model);
         let mut req = tts.audio_generation_request().text(&text).voice(&tts_voice);
+        let mut params = serde_json::Map::new();
+        params.insert("max_output_tokens".into(), max_tts_tokens.into());
         if is_pcm {
-            req = req.additional_params(serde_json::json!({"response_format": "pcm"}));
+            params.insert("response_format".into(), "pcm".into());
         }
+        req = req.additional_params(serde_json::Value::Object(params));
         req.send().await.map(|r| r.audio)
     })
     .await;
@@ -614,6 +619,7 @@ async fn do_talk(
             &my_state.tts_model,
             &my_state.tts_voice,
             &my_state.tts_format,
+            my_state.max_tts_tokens,
         )
         .await;
     }
@@ -631,6 +637,7 @@ async fn do_talk(
                 tts_model: my_state.tts_model.clone(),
                 tts_voice: my_state.tts_voice.clone(),
                 tts_format: my_state.tts_format.clone(),
+                max_tts_tokens: my_state.max_tts_tokens,
             },
             talk,
         })

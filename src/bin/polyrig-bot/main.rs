@@ -35,6 +35,8 @@ pub struct MyBotConfig {
     pub tts_voice: String,
     #[serde(default = "default_tts_format")]
     pub tts_format: String,
+    #[serde(default = "default_max_tts_tokens")]
+    pub max_tts_tokens: u64,
 }
 
 fn default_transcription_model() -> String {
@@ -53,6 +55,10 @@ fn default_tts_format() -> String {
     "mp3".to_string()
 }
 
+fn default_max_tts_tokens() -> u64 {
+    10000
+}
+
 #[derive(Clone)]
 pub struct MyState {
     my_conf: MyBotConfig,
@@ -65,6 +71,7 @@ pub struct MyState {
     pub tts_model: String,
     pub tts_voice: String,
     pub tts_format: String,
+    pub max_tts_tokens: u64,
 }
 
 /// Loads the bot configuration from the TOML file.
@@ -96,6 +103,7 @@ async fn main() -> Result<()> {
     let tts_model = my_conf.tts_model.clone();
     let tts_voice = my_conf.tts_voice.clone();
     let tts_format = my_conf.tts_format.clone();
+    let max_tts_tokens = my_conf.max_tts_tokens;
     log::debug!("{my_conf:?}");
     let my_state = MyState {
         my_conf,
@@ -108,6 +116,7 @@ async fn main() -> Result<()> {
         tts_model,
         tts_voice,
         tts_format,
+        max_tts_tokens,
     };
     Dispatcher::builder(bot, telegram::schema(my_state))
         .dependencies(dptree::deps![InMemStorage::<telegram::State>::new()])
