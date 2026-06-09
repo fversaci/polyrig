@@ -46,10 +46,10 @@ id_whitelist = [
 # transcription_model = "openai/gpt-4o-mini-transcribe"
 
 # Optional: override the TTS model (used for voice replies)
-# tts_model = "openai/gpt-4o-mini-tts-2025-12-15"
+# tts_model = "google/gemini-3.1-flash-tts-preview"
 
 # Optional: override the TTS voice (varies by model)
-# tts_voice = "marin"
+# tts_voice = "Sulafat"
 ```
 
 *Note: At least one user ID must be listed; an empty whitelist blocks all access. All audio model fields have sensible defaults.*

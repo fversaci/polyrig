@@ -82,8 +82,8 @@ Bot-specific settings:
 
 - `id_whitelist`: List of allowed Telegram user IDs. An empty list blocks all access; at least one ID must be present. This file is git-ignored; create from `defaults.toml.template`.
 - `transcription_model`: Model for voice message transcription (default: `openai/gpt-4o-mini-transcribe`).
-- `tts_model`: Model for voice reply generation (default: `openai/gpt-4o-mini-tts-2025-12-15`).
-- `tts_voice`: Voice name for TTS output (default: `marin`; available voices depend on the TTS model).
+- `tts_model`: Model for voice reply generation (default: `google/gemini-3.1-flash-tts-preview`).
+- `tts_voice`: Voice name for TTS output (default: `Sulafat`; available voices depend on the TTS model).
 
 ## Architecture & Data Flow
 

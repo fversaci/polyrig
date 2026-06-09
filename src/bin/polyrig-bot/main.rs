@@ -44,15 +44,15 @@ fn default_transcription_model() -> String {
 }
 
 fn default_tts_model() -> String {
-    openrouter::GPT_4O_MINI_TTS.to_string()
+    "google/gemini-3.1-flash-tts-preview".to_string()
 }
 
 fn default_tts_voice() -> String {
-    "marin".to_string()
+    "Sulafat".to_string()
 }
 
 fn default_tts_format() -> String {
-    "mp3".to_string()
+    "pcm".to_string()
 }
 
 fn default_max_tts_tokens() -> u64 {

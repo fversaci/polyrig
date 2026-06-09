@@ -284,8 +284,8 @@ The bot is built on [teloxide](https://docs.rs/teloxide), which provides a DSL f
 pub struct MyBotConfig {
     id_whitelist: HashSet<ChatId>,  // Empty list blocks all access
     transcription_model: String,    // Default: openai/gpt-4o-mini-transcribe
-    tts_model: String,              // Default: openai/gpt-4o-mini-tts-2025-12-15
-    tts_voice: String,              // Default: "marin"
+    tts_model: String,              // Default: google/gemini-3.1-flash-tts-preview
+    tts_voice: String,              // Default: "Sulafat"
 }
 ```
 
@@ -663,8 +663,8 @@ model = "google/gemini-2.5-flash-lite-preview-09-2025"
 ```toml
 id_whitelist = []           # Set to your Telegram ChatId
 transcription_model = "openai/gpt-4o-mini-transcribe"
-tts_model = "openai/gpt-4o-mini-tts-2025-12-15"
-tts_voice = "marin"
+tts_model = "google/gemini-3.1-flash-tts-preview"
+tts_voice = "Sulafat"
 ```
 
 ---
