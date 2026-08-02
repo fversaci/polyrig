@@ -25,16 +25,16 @@ export OPENROUTER_API_KEY="your_openrouter_api_key_here"
 export OPENAI_API_KEY="your_openai_api_key_here"
 ```
 
-### Talk Configuration (`conf/talks.toml`)
+### Talk Configuration (`talks.toml` in the config directory)
 
-The behavior of the different "Talks" (conversation modes) is defined in `conf/talks.toml`. This file specifies:
+The behavior of the different "Talks" (conversation modes) is defined in `talks.toml` inside the config directory (`~/.config/polyrig/` on Linux). On first run, the bundled template is copied there automatically. This file specifies:
 - **System Prompt**: The instructions given to the model.
 - **Model**: The specific LLM to use (e.g., `deepseek/deepseek-v4-flash:nitro`, `google/gemma-4-26b-a4b-it:nitro`).
 - **Parameters**: Settings like temperature, history length, and message delimiters.
 
-### Bot Configuration (`conf/defaults.toml`)
+### Bot Configuration (`defaults.toml` in the config directory)
 
-The Telegram bot requires a configuration file at `conf/defaults.toml` for settings like user whitelisting and audio model selection. Copy `conf/defaults.toml.template` to `conf/defaults.toml` to get started.
+The Telegram bot reads `defaults.toml` from the config directory (`~/.config/polyrig/` on Linux) for settings like user whitelisting and audio model selection. It is created automatically on first run from the bundled `defaults.toml.template`; an existing local `conf/defaults.toml` is migrated on first run, and user edits are never overwritten. Set `POLYRIG_CONFIG_DIR` to use a non-standard config directory.
 
 ```toml
 id_whitelist = [

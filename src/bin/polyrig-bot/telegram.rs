@@ -514,7 +514,7 @@ fn wav_header(data_len: usize, sample_rate: u32) -> Vec<u8> {
     hdr.extend_from_slice(b"WAVE");
     hdr.extend_from_slice(b"fmt ");
     hdr.extend_from_slice(&16u32.to_le_bytes()); // subchunk1 size
-    hdr.extend_from_slice(&1u16.to_le_bytes());  // PCM
+    hdr.extend_from_slice(&1u16.to_le_bytes()); // PCM
     hdr.extend_from_slice(&num_channels.to_le_bytes());
     hdr.extend_from_slice(&sample_rate.to_le_bytes());
     hdr.extend_from_slice(&byte_rate.to_le_bytes());

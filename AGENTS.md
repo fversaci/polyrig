@@ -59,11 +59,14 @@ polyrig language-practice german b2
 - **`OPENROUTER_API_KEY`**: Required for all binaries except `speech-to-text`. Set this to use OpenRouter models.
 - **`OPENAI_API_KEY`**: Required only for `speech-to-text` (uses OpenAI Whisper directly).
 - **`TELOXIDE_TOKEN`**: Required for the Telegram bot (from BotFather).
+- **`POLYRIG_CONFIG_DIR`**: Overrides the config directory (default: `~/.config/polyrig/` on Linux).
 - **`RUST_LOG`**: Controls logging level (e.g., `info`, `debug`).
 
 ## Configuration Files
 
-### `conf/talks.toml`
+Configuration lives in the standard config directory (`~/.config/polyrig/` on Linux, resolved via the `dirs` crate, overridable with `POLYRIG_CONFIG_DIR`). On first start, the binaries create the directory and copy the bundled templates (`conf/talks.toml` and `conf/defaults.toml.template`, embedded with `include_str!`) — see `ensure_config()` in `src/config.rs`. Existing files are never overwritten, and a legacy `conf/defaults.toml` found in the working directory is migrated on first run so existing whitelist settings survive.
+
+### `talks.toml` (in the config directory)
 
 Defines system prompts, models, and parameters for each conversation mode ("Talk"). Key fields:
 
@@ -76,19 +79,20 @@ Defines system prompts, models, and parameters for each conversation mode ("Talk
 - `temperature`: Model temperature (optional)
 - `additional_params`: Extra parameters like `response_format` for JSON schema enforcement
 
-### `conf/defaults.toml`
+### `defaults.toml` (in the config directory)
 
 Bot-specific settings:
 
-- `id_whitelist`: List of allowed Telegram user IDs. An empty list blocks all access; at least one ID must be present. This file is git-ignored; create from `defaults.toml.template`.
+- `id_whitelist`: List of allowed Telegram user IDs. An empty list blocks all access; at least one ID must be present. Created automatically on first run from the bundled `defaults.toml.template`.
 - `transcription_model`: Model for voice message transcription (default: `openai/gpt-4o-mini-transcribe`).
 - `tts_model`: Model for voice reply generation (default: `google/gemini-3.1-flash-tts-preview`).
 - `tts_voice`: Voice name for TTS output (default: `Sulafat`; available voices depend on the TTS model).
 
 ## Architecture & Data Flow
 
-### Core Library (`src/lib.rs`, `src/talks.rs`)
+### Core Library (`src/lib.rs`, `src/talks.rs`, `src/config.rs`)
 
+- **`config` module**: Resolves the config directory (`~/.config/polyrig/` via the `dirs` crate, overridable with `POLYRIG_CONFIG_DIR`), embeds the bundled templates with `include_str!`, and installs them on first run via `ensure_config()` (never overwriting existing files, migrating a legacy `conf/defaults.toml`).
 - **`Talk` enum**: Defines conversation modes (`Generic`, `LanguagePractice`, `TranslateSubs`). Derives `clap::Subcommand` for CLI argument parsing.
 - **`Conversation` struct**: Manages agent, message history, and streaming. Key methods:
   - `stream_response()`: Sends user message, returns streaming result, adds user message to history, trims history.
@@ -154,7 +158,7 @@ Bot-specific settings:
 
 - The `presuff` tuple `(prefix, suffix)` is applied to user messages before sending to the model.
 - Used primarily for language practice to wrap user text in `<correct_me>...</correct_me>` tags.
-- The delimiters are configured per talk type in `conf/talks.toml`.
+- The delimiters are configured per talk type in `talks.toml` (config directory).
 
 ## Important Gotchas
 
@@ -168,25 +172,29 @@ The `Cargo.toml` specifies `edition = "2024"`. This is a future Rust edition (no
 
 ### 3. Config File Paths
 
-Config files are loaded with relative paths (`"conf/talks.toml"`, `"conf/defaults.toml"`). The working directory must be the project root, or these paths will fail.
+Config files live in the standard config directory (`~/.config/polyrig/` on Linux, overridable with `POLYRIG_CONFIG_DIR`), resolved by `src/config.rs`. On first run the templates are copied there; the old relative `conf/` paths are only used as the embedded template source and for legacy migration. The working directory no longer needs to be the project root.
 
-### 4. Message Delimiters and Empty Input
+### 4. First-Run Migration
+
+`ensure_config()` migrates a legacy local `conf/defaults.toml` into the config directory when `defaults.toml` does not exist there yet. `conf/talks.toml` is not migrated: the compiled-in template is identical to the repo file. Templates are only-copied-if-missing; user edits to config-dir files are never overwritten.
+
+### 5. Message Delimiters and Empty Input
 
 In the CLI, the `read_msg` function reads until an empty line. If the user just presses Enter (empty message), it returns `None` and the loop exits. This is intentional behavior.
 
-### 5. History Asymmetry
+### 6. History Asymmetry
 
 `stream_response()` adds the user message to history **before** streaming the response, but the response is only added via a separate `add_assistant_response()` call after streaming completes. If streaming fails mid-response, the user message is in history but the (partial) assistant response is not, which could cause asymmetry.
 
-### 6. Subtitle Random Labels
+### 7. Subtitle Random Labels
 
 The subtitle translator generates random 5-character alphanumeric labels for each subtitle block. These are used as JSON keys to prevent the LLM from reordering content. The labels must be preserved exactly in the translated output.
 
-### 7. Speech-to-Text Model
+### 8. Speech-to-Text Model
 
 The transcription uses `gpt-4o-transcribe-diarize` model (not standard Whisper) when outputting JSON with diarization. The translation uses `whisper-1`.
 
-### 8. No Test Suite
+### 9. No Test Suite
 
 The project has no tests. All validation is manual or through runtime usage.
 
@@ -194,7 +202,8 @@ The project has no tests. All validation is manual or through runtime usage.
 
 ```
 src/
-├── lib.rs                          # Library root (just exports talks module)
+├── config.rs                       # Config dir resolution, embedded templates, first-run setup
+├── lib.rs                          # Library root (exports config and talks modules)
 ├── talks.rs                        # Core: Talk enum, Conversation struct, streaming
 └── talks/
     └── lang_practice.rs            # Lang and LangLevel enums
@@ -208,8 +217,8 @@ src/bin/
     ├── main.rs                     # Bot entry point, config loading
     └── telegram.rs                 # Bot state machine and handlers
 conf/
-├── talks.toml                      # Conversation mode configurations
-└── defaults.toml.template          # Bot config template (defaults.toml is git-ignored)
+├── talks.toml                      # Bundled talks template (embedded; copied on first run)
+└── defaults.toml.template          # Bundled bot config template (embedded; defaults.toml is user-side)
 docs/
 ├── architecture.md                 # High-level architecture overview
 ├── issues.md                       # Known issues

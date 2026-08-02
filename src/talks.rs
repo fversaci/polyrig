@@ -16,6 +16,7 @@
 **************************************************************************/
 pub mod lang_practice;
 
+use crate::config;
 use anyhow::{Error, Result};
 use async_stream::stream;
 use clap::Subcommand;
@@ -164,7 +165,8 @@ impl Talk {
     /// Initializes a conversation based on the talk type and configuration.
     pub async fn get_conv(&self) -> Result<Conversation, Error> {
         // Load config
-        let config_str = std::fs::read_to_string("conf/talks.toml")?;
+        config::ensure_config()?;
+        let config_str = std::fs::read_to_string(config::talks_config_path())?;
         let config: TalksConfig = toml::from_str(&config_str)?;
 
         let talk_name = self.to_string();

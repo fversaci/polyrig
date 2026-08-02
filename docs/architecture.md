@@ -23,10 +23,11 @@ The project ships four binaries that share a common library (`polyrig`):
 polyrig/
 ├── Cargo.toml
 ├── conf/
-│   ├── talks.toml              # Per-talk configuration
-│   └── defaults.toml.template  # Bot config template
+│   ├── talks.toml              # Bundled talks template (embedded, copied on first run)
+│   └── defaults.toml.template  # Bundled bot config template (embedded)
 ├── src/
-│   ├── lib.rs                  # Library root (exports `talks`)
+│   ├── lib.rs                  # Library root (exports `config`, `talks`)
+│   ├── config.rs               # Config dir resolution + first-run template install
 │   ├── talks.rs                # Core: Talk enum, Conversation, streaming
 │   ├── talks/lang_practice.rs  # Lang, LangLevel enums
 │   └── bin/
@@ -83,7 +84,7 @@ pub enum Talk {
 }
 ```
 
-Each variant maps to a key in `conf/talks.toml`. The `to_string()` value is used as the config lookup key, so the variant names must match the TOML section headers exactly (e.g., `"Generic LLM"`, `"Language Practice"`, `"Translate Subtitles"`).
+Each variant maps to a key in the `[talks]` table of `talks.toml` in the config directory (`~/.config/polyrig/` on Linux; see Section 8). The `to_string()` value is used as the config lookup key, so the variant names must match the TOML section headers exactly (e.g., `"Generic LLM"`, `"Language Practice"`, `"Translate Subtitles"`).
 
 **Platform availability**:
 - `Generic` and `LanguagePractice` run on both CLI and Telegram bot.
@@ -132,7 +133,7 @@ pub struct Conversation {
 
 Called via `Talk::get_conv()` at `talks.rs:164-237`. Flow:
 
-1. **Load config** from `conf/talks.toml` via `toml::from_str()`.
+1. **Load config** from `talks.toml` in the config directory via `toml::from_str()` (`config::ensure_config()` installs the file on first run).
 2. **Look up** the talk-specific `TalkConfig` by the talk's `to_string()` value.
 3. **Create OpenRouter client** and **build the agent** with model, temperature, and additional params.
 4. **Interpolate** `{lang}`, `{level}` placeholders in `system_prompt` and `first_msg` for `LanguagePractice` and `TranslateSubs`.
@@ -289,7 +290,7 @@ pub struct MyBotConfig {
 }
 ```
 
-Config is loaded from `conf/defaults.toml` at startup via `get_conf()`. This file is git-ignored; users create it from `defaults.toml.template`.
+Config is loaded from `defaults.toml` in the config directory (`~/.config/polyrig/` on Linux) at startup via `get_conf()`. On first run `config::ensure_config()` creates it from the bundled `defaults.toml.template` (embedded with `include_str!`), migrating a legacy local `conf/defaults.toml` if present so existing whitelist settings are kept. Existing files are never overwritten.
 
 ### 4.3 State
 
@@ -625,7 +626,9 @@ State Machine → DoTalk → do_talk() → send_stream() → update_markdown()
 
 ## 8. Configuration Files
 
-### 8.1 `conf/talks.toml`
+Configuration lives in the platform config directory (`~/.config/polyrig/` on Linux, resolved via the `dirs` crate; override with `POLYRIG_CONFIG_DIR`). On first start, `config::ensure_config()` (`src/config.rs`) creates the directory and installs the bundled templates (embedded with `include_str!` from `conf/`), never overwriting existing files. A legacy local `conf/defaults.toml` is migrated to `defaults.toml` on first run.
+
+### 8.1 `talks.toml` (config directory, installed from bundled template)
 
 ```toml
 [talks."Generic LLM"]
@@ -658,7 +661,7 @@ additional_params = { response_format = { type = "json_schema", ... } }
 model = "google/gemini-2.5-flash-lite-preview-09-2025"
 ```
 
-### 8.2 `conf/defaults.toml` (git-ignored)
+### 8.2 `defaults.toml` (config directory, installed from bundled `defaults.toml.template`)
 
 ```toml
 id_whitelist = []           # Set to your Telegram ChatId
@@ -689,6 +692,7 @@ tts_voice = "Sulafat"
 | `anyhow` | Error handling | All binaries |
 | `log` / `pretty_env_logger` / `env_logger` | Logging | Bot, Subs |
 | `termimad` | Markdown rendering, interactive views | CLI |
+| `dirs` | Standard config-directory resolution | Core lib |
 | `async-stream` | Async stream macros | Core lib |
 
 ---

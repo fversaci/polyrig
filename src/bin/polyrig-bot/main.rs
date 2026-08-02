@@ -15,6 +15,7 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **************************************************************************/
 use anyhow::Result;
+use polyrig::config;
 use rig_core::providers::openrouter;
 use rig_core::{agent::Agent, message::Message};
 use serde::{Deserialize, Serialize};
@@ -74,13 +75,20 @@ pub struct MyState {
     pub max_tts_tokens: u64,
 }
 
-/// Loads the bot configuration from the TOML file.
+/// Loads the bot configuration from the TOML file in the config directory.
 fn get_conf() -> MyBotConfig {
-    let fname = "conf/defaults.toml";
-    let conf_txt = fs::read_to_string(fname)
-        .unwrap_or_else(|_| panic!("Cannot find configuration file: {}", fname));
-    let my_conf: MyBotConfig = toml::from_str(&conf_txt)
-        .unwrap_or_else(|err| panic!("Unable to parse configuration file {}: {}", fname, err));
+    config::ensure_config()
+        .unwrap_or_else(|err| panic!("Failed to initialize configuration: {err}"));
+    let fname = config::defaults_config_path();
+    let conf_txt = fs::read_to_string(&fname)
+        .unwrap_or_else(|_| panic!("Cannot find configuration file: {}", fname.display()));
+    let my_conf: MyBotConfig = toml::from_str(&conf_txt).unwrap_or_else(|err| {
+        panic!(
+            "Unable to parse configuration file {}: {}",
+            fname.display(),
+            err
+        )
+    });
     my_conf
 }
 
@@ -97,8 +105,8 @@ async fn main() -> Result<()> {
         )
         .init();
     log::info!("Starting bot...");
-    let bot = Bot::from_env();
     let my_conf = get_conf();
+    let bot = Bot::from_env();
     let transcription_model = my_conf.transcription_model.clone();
     let tts_model = my_conf.tts_model.clone();
     let tts_voice = my_conf.tts_voice.clone();
