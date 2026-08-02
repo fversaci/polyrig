@@ -5,7 +5,7 @@ suffix = ""
 max_hist = 40
 first_msg = "Hey there! What's on your mind?"
 generate_response = false
-model = "deepseek/deepseek-v4-flash:nitro"
+model = "deepseek/deepseek-v4-flash-0731:nitro"
 
 [talks."Language Practice"]
 system_prompt = """\
