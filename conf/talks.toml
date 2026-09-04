@@ -60,5 +60,5 @@ suffix = ""
 max_hist = 4
 generate_response = false
 temperature = 0.1
-additional_params = { response_format = { type = "json_schema", json_schema = { name = "subtitles_translation", strict = true, schema = { type = "object", additionalProperties = { type = "string" } } } } }
+additional_params = { provider = { require_parameters = true }, response_format = { type = "json_schema", json_schema = { name = "subtitles_translation", strict = true, schema = { type = "object", additionalProperties = { type = "string" } } } } }
 model = "google/gemini-2.5-flash-lite"
