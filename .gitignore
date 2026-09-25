@@ -1,4 +1,3 @@
 /target
 conf/defaults.toml
-aider.sh
-.aider*
+run-bot.sh

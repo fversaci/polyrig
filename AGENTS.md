@@ -221,7 +221,7 @@ conf/
 └── defaults.toml.template          # Bundled bot config template (embedded; defaults.toml is user-side)
 docs/
 ├── architecture.md                 # High-level architecture overview
-├── issues.md                       # Known issues
+├── openrouter-audio.md             # Notes on OpenRouter audio (TTS/transcription) support
 └── srt-translation.md              # Details on subtitle translation
 ```
 
