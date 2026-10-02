@@ -84,9 +84,9 @@ Defines system prompts, models, and parameters for each conversation mode ("Talk
 Bot-specific settings:
 
 - `id_whitelist`: List of allowed Telegram user IDs. An empty list blocks all access; at least one ID must be present. Created automatically on first run from the bundled `defaults.toml.template`.
-- `transcription_model`: Model for voice message transcription (default: `openai/gpt-4o-mini-transcribe`).
-- `tts_model`: Model for voice reply generation (default: `google/gemini-3.1-flash-tts-preview`).
-- `tts_voice`: Voice name for TTS output (default: `Sulafat`; available voices depend on the TTS model).
+- `transcription_model`: Model for voice message transcription (default: `nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b`).
+- `tts_model`: Model for voice reply generation (default: `microsoft/mai-voice-2.1-flash`).
+- `tts_voice`: Voice name for TTS output (default: `en-US-Harper:MAI-Voice-2.1`; available voices depend on the TTS model).
 
 ## Architecture & Data Flow
 

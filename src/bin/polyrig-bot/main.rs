@@ -41,19 +41,19 @@ pub struct MyBotConfig {
 }
 
 fn default_transcription_model() -> String {
-    openrouter::GPT_4O_MINI_TRANSCRIBE.to_string()
+    "nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b".to_string()
 }
 
 fn default_tts_model() -> String {
-    "google/gemini-3.1-flash-tts-preview".to_string()
+    "microsoft/mai-voice-2.1-flash".to_string()
 }
 
 fn default_tts_voice() -> String {
-    "Sulafat".to_string()
+    "en-US-Harper:MAI-Voice-2.1".to_string()
 }
 
 fn default_tts_format() -> String {
-    "pcm".to_string()
+    "mp3".to_string()
 }
 
 fn default_max_tts_tokens() -> u64 {

@@ -284,9 +284,9 @@ The bot is built on [teloxide](https://docs.rs/teloxide), which provides a DSL f
 ```rust
 pub struct MyBotConfig {
     id_whitelist: HashSet<ChatId>,  // Empty list blocks all access
-    transcription_model: String,    // Default: openai/gpt-4o-mini-transcribe
-    tts_model: String,              // Default: google/gemini-3.1-flash-tts-preview
-    tts_voice: String,              // Default: "Sulafat"
+    transcription_model: String,    // Default: nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b
+    tts_model: String,              // Default: microsoft/mai-voice-2.1-flash
+    tts_voice: String,              // Default: "en-US-Harper:MAI-Voice-2.1"
 }
 ```
 
@@ -665,9 +665,9 @@ model = "google/gemini-2.5-flash-lite-preview-09-2025"
 
 ```toml
 id_whitelist = []           # Set to your Telegram ChatId
-transcription_model = "openai/gpt-4o-mini-transcribe"
-tts_model = "google/gemini-3.1-flash-tts-preview"
-tts_voice = "Sulafat"
+transcription_model = "nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b"
+tts_model = "microsoft/mai-voice-2.1-flash"
+tts_voice = "en-US-Harper:MAI-Voice-2.1"
 ```
 
 ---

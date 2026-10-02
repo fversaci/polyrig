@@ -145,11 +145,49 @@ curl https://openrouter.ai/api/v1/audio/transcriptions \
 | `input_audio.format` | string | Yes      | Audio format (e.g., `wav`, `mp3`, `flac`, `m4a`, `ogg`, `webm`, `aac`)                |
 | `language`           | string | No       | ISO-639-1 language code (e.g., `"en"`, `"ja"`). Auto-detected if omitted              |
 | `temperature`        | number | No       | Sampling temperature between 0 and 1. Lower values produce more deterministic results |
-| `provider`           | object | No       | Provider-specific passthrough configuration                                           |
+| `response_format`    | string | No       | `json` (default) or `verbose_json`. See [Verbose Transcripts](#verbose-transcripts-timestamps-and-speakers) |
+| `timestamp_granularities` | string[] | No  | `["segment"]` and/or `["word"]`. Only used with `verbose_json` |
+| `provider`           | object | No       | Provider-specific options under `provider.options`. Routing preferences (`order`, `only`, `ignore`) are not applied to transcription requests |
+
+### OpenAI-Compatible Multipart Requests
+
+The endpoint also accepts OpenAI-style `multipart/form-data` requests, so clients built for OpenAI's `/v1/audio/transcriptions` (including the official OpenAI SDKs) work by pointing their base URL at `https://openrouter.ai/api/v1`:
+
+**OpenAI SDK (Python)**
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key="<OPENROUTER_API_KEY>",
+)
+
+with open("audio.wav", "rb") as f:
+    result = client.audio.transcriptions.create(
+        model="openai/whisper-large-v3",
+        file=f,
+    )
+
+print(result.text)
+```
+
+**cURL (multipart)**
+
+```bash
+curl https://openrouter.ai/api/v1/audio/transcriptions \
+  -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+  -F file="@audio.wav" \
+  -F model="openai/whisper-large-v3"
+```
+
+The `file`, `model`, `language`, `temperature`, `response_format`, and `timestamp_granularities` fields are supported. `prompt` is accepted but ignored. `response_format` may be `json` (the default) or `verbose_json`. `text`, `srt`, and `vtt` are rejected with a 400. With `verbose_json`, pass `timestamp_granularities[]=word` to also receive word-level timestamps in the `words` array.
+
+Multipart uploads are limited to 25 MB, the same cap OpenAI enforces. For compressed formats this covers long recordings: roughly 26 minutes of 128 kbps MP3, 52 minutes at 64 kbps, or over 2 hours of 24 kbps Opus voice notes. Uncompressed WAV fills the cap much faster (about 13 minutes at 16 kHz mono); prefer `mp3` or `opus` for long recordings. Larger files should be sent as base64 JSON via `input_audio`, which supports streaming offload. Recordings longer than about a minute of processing time should be split anyway, since upstream providers time out after 60 seconds per request.
 
 ### Provider-Specific Options
 
-You can pass provider-specific options using the `provider` parameter. Options are keyed by provider slug, and only the options for the matched provider are forwarded:
+Pass provider-specific parameters through `provider.options`, keyed by the provider slug from the endpoints API. Only the options for the provider that serves the request are forwarded, and they are sent under the provider's own field names, so use the names and shapes from that provider's transcription API reference. Parameters that OpenRouter normalizes across providers (`language`, `temperature`, `response_format`, `timestamp_granularities`) stay at the top level of the request:
 
 ```json
 {
@@ -167,6 +205,59 @@ You can pass provider-specific options using the `provider` parameter. Options a
   }
 }
 ```
+
+To find the slug for each provider serving a model, call the endpoints API: `curl https://openrouter.ai/api/v1/models/openai/whisper-large-v3/endpoints` — the `tag` field of each endpoint record is the key to use under `provider.options`.
+
+Features a provider exposes only through its own options, such as speaker diarization, vocabulary or keyword hints, and output style controls, are passed this way. Provider integrations differ in which fields they forward and how they handle unsupported fields. Some forward only an allowlist and drop the rest without an error (for example Deepgram accepts `punctuate`, `diarize`, `smart_format`, and `detect_language`), while others such as Azure forward most fields as-is, so an invalid option usually surfaces as a provider error. Test an option before relying on it.
+
+### Verbose Transcripts (Timestamps and Speakers)
+
+Set `response_format` to `verbose_json` to request structured fields such as `language`, `duration`, and a `segments` array with start and end times (OpenAI-compatible providers also return `task`). Which of these fields are present varies by provider. Add `"word"` to `timestamp_granularities` to also request a `words` array. Providers that do not return structured output reject `verbose_json` with a 400, as do some individual models (for example `openai/gpt-4o-transcribe` and `microsoft/mai-transcribe-1.5`).
+
+Speaker diarization is enabled through the provider's own option under `provider.options`. When the provider returns speaker labels, each segment (and word, where the provider supports it) carries a `speaker` index:
+
+```bash
+AUDIO_BASE64=$(base64 < audio.mp3 | tr -d '\n')
+
+curl https://openrouter.ai/api/v1/audio/transcriptions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+  -d '{
+    "model": "microsoft/mai-transcribe-2",
+    "input_audio": {
+      "data": "'"$AUDIO_BASE64"'",
+      "format": "mp3"
+    },
+    "response_format": "verbose_json",
+    "timestamp_granularities": ["segment", "word"],
+    "provider": {
+      "options": {
+        "azure": {
+          "diarization": { "enabled": true }
+        }
+      }
+    }
+  }'
+```
+
+```json
+{
+  "language": "en",
+  "duration": 6.4,
+  "text": "Hello there. Hi, how are you?",
+  "segments": [
+    { "id": 0, "start": 0.0, "end": 1.2, "text": "Hello there.", "speaker": 0 },
+    { "id": 1, "start": 1.5, "end": 3.1, "text": "Hi, how are you?", "speaker": 1 }
+  ],
+  "words": [
+    { "word": "Hello", "start": 0.0, "end": 0.4, "speaker": 0 },
+    { "word": "there.", "start": 0.4, "end": 1.2, "speaker": 0 }
+  ],
+  "usage": { "seconds": 6.4, "cost": 0.000178 }
+}
+```
+
+Whether speaker labels appear on segments, words, or both depends on the provider. Azure labels each phrase, and OpenRouter applies that label to the segment and to each word within it. Other providers' diarization options (for example Deepgram's `diarize`) are passed the same way under their provider slug.
 
 ### Response Format
 
@@ -190,6 +281,12 @@ The STT endpoint returns a JSON response with the transcribed text:
 | Field                 | Type   | Description                                  |
 | --------------------- | ------ | -------------------------------------------- |
 | `text`                | string | The transcribed text                         |
+| `task`                | string | `transcribe`. Only with `verbose_json`, when the provider reports it |
+| `language`            | string | Detected or requested language. Only with `verbose_json` |
+| `duration`            | number | Audio duration in seconds. Only with `verbose_json` |
+| `confidence`          | number | Provider confidence for the whole transcript, 0 to 1. Only with `verbose_json` and only when the provider scores the full transcript |
+| `segments`            | array  | Timestamped segments with `start`, `end`, `text`, and optional `speaker`. Only with `verbose_json` |
+| `words`               | array  | Timestamped words with `word`, `start`, `end`, optional `speaker`, and optional `confidence`. Only with `verbose_json` and `"word"` in `timestamp_granularities` |
 | `usage.seconds`       | number | Duration of the input audio in seconds       |
 | `usage.total_tokens`  | number | Total number of tokens used (input + output) |
 | `usage.input_tokens`  | number | Number of input tokens billed                |
@@ -427,10 +524,39 @@ curl https://openrouter.ai/api/v1/audio/speech \
 | ----------------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `model`           | string | Yes      | The TTS model to use (e.g., `openai/gpt-4o-mini-tts-2025-12-15`, `mistralai/voxtral-mini-tts-2603`)                              |
 | `input`           | string | Yes      | The text to synthesize into speech                                                                                               |
-| `voice`           | string | Yes      | Voice identifier. Available voices vary by model — check each model's page on the [Models page](/models) for supported voices    |
-| `response_format` | string | No       | Audio output format: `mp3` or `pcm`. Defaults to `pcm`                                                                           |
+| `voice`           | string | Provider-dependent | Voice identifier. Available voices vary by model, so check each model's page on the [Models page](/models) for supported voices. Omit this parameter only when the selected provider documents a default voice; otherwise an explicit voice is required |
+| `response_format` | string | No       | Audio output format: `mp3` or `pcm`. Defaults to `pcm`                                                                            |
 | `speed`           | number | No       | Playback speed multiplier. Only used by models that support it (e.g., OpenAI TTS). Ignored by other providers. Defaults to `1.0` |
-| `provider`        | object | No       | Provider-specific passthrough configuration                                                                                      |
+| `input_references` | array | No       | Reference content for stateless voice cloning: one `input_audio` part carrying the voice sample, optionally with one `text` part with its transcript. See [Voice Cloning](#voice-cloning) |
+| `provider`        | object | No       | Provider-specific passthrough configuration                                                                                       |
+
+When `voice` is omitted, OpenRouter only forwards the request to providers whose adapter supports a provider-side default voice. For other providers, the request is rejected with a validation error.
+
+### Voice Cloning
+
+Some models support **stateless voice cloning**: you send a short sample of reference audio directly with the TTS request, and the generated speech mimics that voice. No separate voice-creation or upload step is required.
+
+Pass the reference audio as a base64 `input_audio` part in `input_references` (a `data:audio/...;base64,` URI also works), and optionally include its transcript as a `text` part:
+
+```json
+{
+  "model": "fish-audio/s2.1-pro",
+  "input": "Hello from my cloned voice!",
+  "response_format": "mp3",
+  "input_references": [
+    { "type": "input_audio", "input_audio": { "data": "data:audio/wav;base64,UklGRuQXDAB..." } },
+    { "type": "text", "text": "This is the transcript of the reference audio." }
+  ]
+}
+```
+
+Note: some providers for a voice-cloning model may not support voice cloning. Check the `supports_voice_cloning` field on the endpoints API.
+
+Limits and requirements:
+
+* Supported audio formats for the reference sample are provider-specific
+* `input_references` accepts at most one `input_audio` part and one `text` part, and requires `input_audio`
+* The reference audio is limited to 20 MiB of base64 (15 MiB of decoded audio); larger requests are rejected with a 400
 
 ### Provider-Specific Options
 
@@ -451,9 +577,64 @@ You can pass provider-specific options using the `provider` parameter. Options a
 }
 ```
 
+#### Azure (MAI-Voice-2)
+
+Azure TTS uses SSML internally, but this is fully abstracted, so you only need the standard parameters. The `voice` parameter takes an Azure voice name (e.g., `en-US-Harper:MAI-Voice-2`), and `speed` is supported (range: 0.5-2.0).
+
+For expressive synthesis, pass `style` and optionally `styledegree` via provider options:
+
+```json
+{
+  "model": "microsoft/mai-voice-2",
+  "input": "Welcome to the event!",
+  "voice": "en-US-Harper:MAI-Voice-2",
+  "response_format": "mp3",
+  "speed": 1.0,
+  "provider": {
+    "options": {
+      "azure": {
+        "style": "cheerful",
+        "styledegree": 1.2
+      }
+    }
+  }
+}
+```
+
+| Option        | Type   | Description                                                                                                    |
+| ------------- | ------ | -------------------------------------------------------------------------------------------------------------- |
+| `style`       | string | Expressive speaking style (e.g., `cheerful`, `sad`, `angry`, `excited`). Available styles depend on the voice. |
+| `styledegree` | number | Intensity of the style effect. Default is `1.0`; higher values increase expressiveness.                        |
+
+#### Google (Gemini TTS)
+
+Gemini TTS models read `input` verbatim, so delivery directions written into the text may be spoken aloud. Pass the style as `speech_metadata` in provider options instead. It is attached to the input text part of the upstream request, and any other options are forwarded as generation config:
+
+```json
+{
+  "model": "google/gemini-3.8-flash-lite-tts",
+  "input": "Have a wonderful day!",
+  "voice": "Kore",
+  "response_format": "pcm",
+  "provider": {
+    "options": {
+      "google-ai-studio": {
+        "speech_metadata": {
+          "style": "warm and friendly"
+        }
+      }
+    }
+  }
+}
+```
+
+| Option                  | Type   | Description                                                                           |
+| ----------------------- | ------ | ------------------------------------------------------------------------------------- |
+| `speech_metadata.style` | string | Sustained delivery style for the input (e.g., `cheerful and friendly`, `whispering`). |
+
 ### Response Format
 
-The TTS endpoint returns a **raw audio byte stream**, not JSON. The response includes the following headers:
+The TTS endpoint returns a **raw audio byte stream**, not JSON. The response includes the following headers: The response includes the following headers:
 
 | Header            | Description                                                                             |
 | ----------------- | --------------------------------------------------------------------------------------- |
