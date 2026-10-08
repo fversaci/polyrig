@@ -3,10 +3,14 @@ id_whitelist = []
 # Optional: override default transcription model (OpenRouter)
 # transcription_model = "nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b"
 
-# Optional: override default TTS model (OpenRouter)
+# Optional: override default TTS model (OpenRouter).
+# List the voices of any model with: polyrig get-tts-voices <model>
 # tts_model = "microsoft/mai-voice-2.1-flash"
 
-# Optional: override default TTS voice (varies by model; required for Azure models).
+# Optional: override the TTS voice (varies by model).
+# If omitted, a random voice supported by the TTS model is picked for
+# each new conversation (requires the OpenRouter models API; falls back
+# to "en-US-Harper:MAI-Voice-2.1" when the lookup fails).
 # Voice is multilingual: en-US-Harper:MAI-Voice-2.1 speaks all 23 supported languages.
 # tts_voice = "en-US-Harper:MAI-Voice-2.1"
 

@@ -4,7 +4,7 @@
 
 PolyRig is a Rust project providing LLM-powered conversational interfaces via `rig-core` (using OpenRouter). It consists of a core library and four binaries:
 
-1. **CLI (`polyrig`)**: Interactive command-line interface for generic chat and language practice.
+1. **CLI (`polyrig`)**: Interactive command-line interface for generic chat and language practice. Also provides `polyrig get-tts-voices [MODEL]` to list the TTS voices supported by an OpenRouter TTS model (default: the `tts_model` from `defaults.toml`).
 2. **Telegram Bot (`polyrig-bot`)**: Telegram bot for LLM interaction.
 3. **Subtitle Translator (`translate-subs`)**: CLI tool to translate `.srt` subtitle files.
 4. **Speech to Text (`speech-to-text`)**: CLI tool to transcribe/translate audio using OpenAI's Whisper.
@@ -86,13 +86,15 @@ Bot-specific settings:
 - `id_whitelist`: List of allowed Telegram user IDs. An empty list blocks all access; at least one ID must be present. Created automatically on first run from the bundled `defaults.toml.template`.
 - `transcription_model`: Model for voice message transcription (default: `nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b`).
 - `tts_model`: Model for voice reply generation (default: `microsoft/mai-voice-2.1-flash`).
-- `tts_voice`: Voice name for TTS output (default: `en-US-Harper:MAI-Voice-2.1`; available voices depend on the TTS model).
+- `tts_voice`: Optional voice name for TTS output. When omitted, a random voice supported by the TTS model is picked for each new conversation (requires the OpenRouter models API; falls back to `en-US-Harper:MAI-Voice-2.1` on failure). Available voices for a model can be listed with `polyrig get-tts-voices [MODEL]`.
 
 ## Architecture & Data Flow
 
 ### Core Library (`src/lib.rs`, `src/talks.rs`, `src/config.rs`)
 
 - **`config` module**: Resolves the config directory (`~/.config/polyrig/` via the `dirs` crate, overridable with `POLYRIG_CONFIG_DIR`), embeds the bundled templates with `include_str!`, and installs them on first run via `ensure_config()` (never overwriting existing files, migrating a legacy `conf/defaults.toml`).
+- **`models` module** (`src/models.rs`): Queries the OpenRouter models API (`GET /api/v1/models?output_modalities=speech`) for TTS voice discovery: `supported_tts_voices(model)` and `tts_model_ids()`.
+- **`bot_config` module** (`src/bot_config.rs`): Shared `BotConfig` struct for `defaults.toml` (used by both `polyrig` and `polyrig-bot`), with optional `tts_voice` and the `DEFAULT_TTS_VOICE` fallback constant.
 - **`Talk` enum**: Defines conversation modes (`Generic`, `LanguagePractice`, `TranslateSubs`). Derives `clap::Subcommand` for CLI argument parsing.
 - **`Conversation` struct**: Manages agent, message history, and streaming. Key methods:
   - `stream_response()`: Sends user message, returns streaming result, adds user message to history, trims history.
@@ -102,7 +104,7 @@ Bot-specific settings:
 
 ### CLI Binary (`src/bin/polyrig/`)
 
-- Uses `clap` to parse `Talk` subcommand.
+- Uses `clap` to parse the top-level subcommand (`Command::Talk(Talk)` or `Command::GetTtsVoices { model }`).
 - Uses `rustyline` for interactive input.
 - Reads multi-line messages until empty line (user presses Enter twice).
 - Streams responses raw (no formatting) for smooth live display.
@@ -203,7 +205,9 @@ The project has no tests. All validation is manual or through runtime usage.
 ```
 src/
 ├── config.rs                       # Config dir resolution, embedded templates, first-run setup
-├── lib.rs                          # Library root (exports config and talks modules)
+├── models.rs                       # OpenRouter models API helpers (TTS voice discovery)
+├── bot_config.rs                   # Shared BotConfig (defaults.toml) and TTS voice fallback
+├── lib.rs                          # Library root (exports bot_config, config, models, talks)
 ├── talks.rs                        # Core: Talk enum, Conversation struct, streaming
 └── talks/
     └── lang_practice.rs            # Lang and LangLevel enums
@@ -244,4 +248,5 @@ Key crates:
 - **`log`/`pretty_env_logger`/`env_logger`**: Logging.
 - **`termimad`**: Markdown rendering and interactive scrollable views (CLI).
 - **`async-stream`**: Async stream macros.
-- **`rand`**: Random label generation for subtitle translation.
+- **`rand`**: Random label generation for subtitle translation; random TTS voice selection per conversation.
+- **`reqwest`**: HTTP client for the OpenRouter models API (TTS voice discovery).

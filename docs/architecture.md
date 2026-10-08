@@ -26,8 +26,10 @@ polyrig/
 │   ├── talks.toml              # Bundled talks template (embedded, copied on first run)
 │   └── defaults.toml.template  # Bundled bot config template (embedded)
 ├── src/
-│   ├── lib.rs                  # Library root (exports `config`, `talks`)
+│   ├── lib.rs                  # Library root (exports `config`, `models`, `talks`, `bot_config`)
 │   ├── config.rs               # Config dir resolution + first-run template install
+│   ├── models.rs               # OpenRouter models API helpers (TTS voice discovery)
+│   ├── bot_config.rs           # Shared BotConfig (defaults.toml) + voice fallback const
 │   ├── talks.rs                # Core: Talk enum, Conversation, streaming
 │   ├── talks/lang_practice.rs  # Lang, LangLevel enums
 │   └── bin/
@@ -52,6 +54,9 @@ polyrig/
 ```
 src/
 ├── lib.rs                 → pub mod talks;
+│                            pub mod config;
+│                            pub mod models;
+│                            pub mod bot_config;
 ├── talks.rs               → pub mod lang_practice;
 │                            Talk enum
 │                            Conversation struct
@@ -187,11 +192,16 @@ Both derive `ValueEnum` (for clap CLI), `EnumString`/`Display`/`EnumIter` (for s
 
 ```
 ┌─────────────────────────────────────────────┐
-│  clap: parse Talk subcommand                │
+│  clap: parse subcommand                     │
 │  ┌───────────────────────────────────────┐  │
 │  │ polyrig generic                       │  │
 │  │ polyrig language-practice german      │  │
+│  │ polyrig get-tts-voices [MODEL]        │  │
 │  └───────────────────────────────────────┘  │
+├─────────────────────────────────────────────┤
+│  GetTtsVoices: resolve model (arg or        │
+│  defaults.toml tts_model), then             │
+│  models::supported_tts_voices() → print     │
 ├─────────────────────────────────────────────┤
 │  talk.get_conv() → Conversation             │
 │  └─ Load talks.toml, build agent, init      │
@@ -282,15 +292,19 @@ The bot is built on [teloxide](https://docs.rs/teloxide), which provides a DSL f
 **Source**: `main.rs:27-47`
 
 ```rust
-pub struct MyBotConfig {
+pub struct BotConfig {                          // Defined in the shared library (src/bot_config.rs)
     id_whitelist: HashSet<ChatId>,  // Empty list blocks all access
     transcription_model: String,    // Default: nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b
     tts_model: String,              // Default: microsoft/mai-voice-2.1-flash
-    tts_voice: String,              // Default: "en-US-Harper:MAI-Voice-2.1"
+    tts_voice: Option<String>,      // None: random supported voice per conversation
+    tts_format: String,             // Default: "mp3"
+    max_tts_tokens: u64,            // Default: 10000
 }
 ```
 
-Config is loaded from `defaults.toml` in the config directory (`~/.config/polyrig/` on Linux) at startup via `get_conf()`. On first run `config::ensure_config()` creates it from the bundled `defaults.toml.template` (embedded with `include_str!`), migrating a legacy local `conf/defaults.toml` if present so existing whitelist settings are kept. Existing files are never overwritten.
+Config is loaded from `defaults.toml` in the config directory (`~/.config/polyrig/` on Linux) at startup via `bot_config::get_conf()`. On first run `config::ensure_config()` creates it from the bundled `defaults.toml.template` (embedded with `include_str!`), migrating a legacy local `conf/defaults.toml` if present so existing whitelist settings are kept. Existing files are never overwritten.
+
+When `tts_voice` is `None`, a random voice is picked at conversation start (`start_talk`) from the TTS model's `supported_voices` (via `polyrig::models::supported_tts_voices`, which queries `GET /api/v1/models?output_modalities=speech`). On API failure or an empty voice list the bot logs a warning and falls back to `bot_config::DEFAULT_TTS_VOICE` (`"en-US-Harper:MAI-Voice-2.1"`). The chosen voice stays fixed for the whole conversation.
 
 ### 4.3 State
 
@@ -300,7 +314,7 @@ Config is loaded from `defaults.toml` in the config directory (`~/.config/polyri
 
 ```rust
 pub struct MyState {
-    my_conf: MyBotConfig,
+    my_conf: BotConfig,
     agent: Option<Agent<openrouter::CompletionModel>>,
     history: Vec<Message>,
     presuff: (String, String),
@@ -426,6 +440,8 @@ At `telegram.rs:500-534`. Generates TTS audio and sends it as a voice message:
 1. Spawns TTS generation in a background task.
 2. Creates an `openrouter::AudioGenerationModel` from `my_state.tts_model`.
 3. Sends the audio bytes as `InputFile::memory(...)` with filename `reply.mp3`.
+
+The voice used (`my_state.tts_voice`) is resolved once per conversation in `start_talk()`: either the explicit `tts_voice` from `defaults.toml`, or a random voice drawn from the model's `supported_voices` (with a warning + `DEFAULT_TTS_VOICE` fallback if the lookup fails).
 
 ---
 
@@ -667,8 +683,15 @@ model = "google/gemini-2.5-flash-lite-preview-09-2025"
 id_whitelist = []           # Set to your Telegram ChatId
 transcription_model = "nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b"
 tts_model = "microsoft/mai-voice-2.1-flash"
-tts_voice = "en-US-Harper:MAI-Voice-2.1"
+tts_format = "mp3"
+max_tts_tokens = 10000
+# tts_voice: optional. When omitted, a random voice supported by the
+# TTS model is picked for each new conversation (fallback:
+# "en-US-Harper:MAI-Voice-2.1" if the models API fails).
+# tts_voice = "en-US-Harper:MAI-Voice-2.1"
 ```
+
+List the voices supported by any TTS model with `polyrig get-tts-voices [MODEL]` (defaults to the configured `tts_model`).
 
 ---
 
@@ -688,11 +711,12 @@ tts_voice = "en-US-Harper:MAI-Voice-2.1"
 | `strum` / `strum_macros` | Enum string conversion | Core lib, Bot |
 | `subtp` | SRT subtitle parsing | Subs |
 | `chrono` | Date/time handling | Bot |
-| `rand` | Random label generation | Subs |
+| `rand` | Random label generation, random TTS voice | Subs, Bot |
 | `anyhow` | Error handling | All binaries |
 | `log` / `pretty_env_logger` / `env_logger` | Logging | Bot, Subs |
 | `termimad` | Markdown rendering, interactive views | CLI |
 | `dirs` | Standard config-directory resolution | Core lib |
+| `reqwest` | OpenRouter models API (voice discovery) | Core lib |
 | `async-stream` | Async stream macros | Core lib |
 
 ---
@@ -734,7 +758,7 @@ When outputting JSON (default), the binary uses `gpt-4o-transcribe-diarize` inst
 | `src/talks/lang_practice.rs` | 48 | `Lang`, `LangLevel` enums |
 | `src/bin/polyrig/main.rs` | 115 | `main()`, `read_msg()` |
 | `src/bin/polyrig/view_markdown.rs` | 168 | `build_history_markdown()`, `show_scrolled_view()` |
-| `src/bin/polyrig-bot/main.rs` | 111 | `main()`, `get_conf()`, `MyBotConfig`, `MyState` |
+| `src/bin/polyrig-bot/main.rs` | 111 | `main()`, `MyState` |
 | `src/bin/polyrig-bot/telegram.rs` | 830 | `State` enum, `schema()`, `do_talk()`, `send_stream()`, `send_voice_reply()`, `StreamState` |
 | `src/bin/translate-subs.rs` | 369 | `main()`, `Translator`, `chunker()`, `chunk_to_json()`, `json_to_chunk()`, `assemble_blocks()` |
 | `src/bin/speech-to-text.rs` | 126 | `main()`, `handle_transcription()`, `handle_translation()` |

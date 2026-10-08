@@ -48,12 +48,14 @@ id_whitelist = [
 # Optional: override the TTS model (used for voice replies)
 # tts_model = "google/gemini-3.1-flash-tts-preview"
 
-# Optional: override the TTS voice (varies by model)
+# Optional: override the TTS voice (varies by model).
+# If omitted, a random voice supported by the TTS model is picked for each
+# new conversation. List the voices of any model with:
+#   polyrig get-tts-voices <model>
 # tts_voice = "Sulafat"
 ```
 
 *Note: At least one user ID must be listed; an empty whitelist blocks all access. All audio model fields have sensible defaults.*
-
 ## Installation
 
 Assuming you have a Rust toolchain installed, build the project with:
@@ -78,6 +80,15 @@ polyrig language-practice german advanced
 
 *Note: Press Enter twice to send your message. Send an empty message to leave the chat.*
 
+**List TTS voices:**
+```bash
+# Voices of the model configured in defaults.toml (tts_model)
+polyrig get-tts-voices
+
+# Voices of a specific model
+polyrig get-tts-voices elevenlabs/eleven-v4-turbo
+```
+
 After each response, an **interactive scrollable markdown view** of the full conversation is displayed. Use `↑`/`↓`, `PgUp`/`PgDn`, `j`/`k`, or the mouse wheel to scroll. Press `q` or `Esc` to exit. The latest response is re-rendered with markdown formatting after exiting the scroll view.
 
 ### 2. Telegram Bot (`polyrig-bot`)
@@ -97,6 +108,8 @@ The bot supports **full voice conversations** — ideal for practicing a foreign
 - Choose any language and proficiency level (e.g., German Advanced) for targeted practice with grammar correction.
 
 To enable voice replies, select the language practice talk in the bot and confirm when prompted "Enable voice replies?".
+
+If `tts_voice` is not set in `defaults.toml`, a random voice supported by the TTS model is chosen for each new conversation and kept for its duration.
 
 ### 3. Subtitle Translator (`translate-subs`)
 

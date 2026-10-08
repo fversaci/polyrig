@@ -18,9 +18,12 @@ use crate::MyState;
 use anyhow::{Error, Result};
 use chrono::Duration;
 use chrono::prelude::*;
+use polyrig::bot_config;
+use polyrig::models::supported_tts_voices;
 use polyrig::talks::Talk; // get_response, stream_messages
 use polyrig::talks::lang_practice::{Lang, LangLevel};
 use polyrig::talks::stream_messages;
+use rand::RngExt;
 use rig_core::agent::StreamingResult;
 use rig_core::audio_generation::{AudioGenerationError, AudioGenerationModel};
 use rig_core::client::ProviderClient;
@@ -384,6 +387,13 @@ async fn start_talk(
     );
     let conversation = talk.get_conv().await?;
 
+    // Resolve the TTS voice for this conversation: when the config does
+    // not define one, pick a random supported voice of the TTS model.
+    let tts_voice = match my_state.my_conf.tts_voice.clone() {
+        Some(v) => v,
+        None => pick_random_tts_voice(&my_state.tts_model).await,
+    };
+
     // Send the first message if it exists, splitting if necessary
     if let Some(first_msg) = &conversation.first_msg {
         send_text_chunks(bot.clone(), chat_id, first_msg).await?;
@@ -401,7 +411,7 @@ async fn start_talk(
                 voice_reply: my_state.voice_reply,
                 transcription_model: my_state.transcription_model.clone(),
                 tts_model: my_state.tts_model.clone(),
-                tts_voice: my_state.tts_voice.clone(),
+                tts_voice,
                 tts_format: my_state.tts_format.clone(),
                 max_tts_tokens: my_state.max_tts_tokens,
             },
@@ -409,6 +419,36 @@ async fn start_talk(
         })
         .await?;
     Ok(())
+}
+
+/// Picks a random voice supported by the given TTS model.
+///
+/// Falls back to `DEFAULT_TTS_VOICE` with a warning when the models API
+/// fails or the model publishes no voices.
+async fn pick_random_tts_voice(tts_model: &str) -> String {
+    match supported_tts_voices(tts_model).await {
+        Ok(voices) if !voices.is_empty() => {
+            let voice = voices[rand::rng().random_range(0..voices.len())].clone();
+            log::info!("Using random TTS voice '{voice}' for model '{tts_model}'");
+            voice
+        }
+        Ok(_) => {
+            log::warn!(
+                "Model '{tts_model}' publishes no supported voices; \
+                 falling back to '{}' as TTS voice",
+                bot_config::DEFAULT_TTS_VOICE
+            );
+            bot_config::DEFAULT_TTS_VOICE.to_string()
+        }
+        Err(e) => {
+            log::warn!(
+                "Could not fetch supported voices for '{tts_model}': {e}; \
+                 falling back to '{}' as TTS voice",
+                bot_config::DEFAULT_TTS_VOICE
+            );
+            bot_config::DEFAULT_TTS_VOICE.to_string()
+        }
+    }
 }
 
 /// Handles user messages during an active conversation.

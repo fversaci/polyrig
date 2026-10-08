@@ -16,7 +16,9 @@
 **************************************************************************/
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, Subcommand};
+use polyrig::bot_config;
+use polyrig::models;
 use polyrig::talks::Talk;
 use polyrig::talks::stream_messages;
 use termimad::MadSkin;
@@ -27,9 +29,44 @@ mod view_markdown;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Command-line arguments for selecting a conversation
     #[command(subcommand)]
-    talk: Talk,
+    command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    #[command(flatten)]
+    Talk(Talk),
+    /// List the TTS voices supported by an OpenRouter TTS model
+    GetTtsVoices {
+        /// OpenRouter TTS model id (defaults to tts_model in the config)
+        model: Option<String>,
+    },
+}
+
+/// Prints the voices supported by the given TTS model, one per line.
+async fn print_tts_voices(model: Option<String>) -> Result<()> {
+    let model = match model {
+        Some(m) => m,
+        None => bot_config::get_conf()?.tts_model,
+    };
+    match models::supported_tts_voices(&model).await {
+        Ok(voices) if !voices.is_empty() => {
+            println!("Available voices for {model}:");
+            for voice in voices {
+                println!("{voice}");
+            }
+            Ok(())
+        }
+        Ok(_) => {
+            let available = models::tts_model_ids().await?;
+            Err(anyhow::anyhow!(
+                "Model '{model}' publishes no supported voices. Available TTS models:\n  {}",
+                available.join("\n  ")
+            ))
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// Reads a multi-line user message from standard input.
@@ -54,7 +91,11 @@ fn read_msg(rl: &mut rustyline::DefaultEditor) -> Option<String> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    let talk = args.talk;
+
+    let talk = match args.command {
+        Command::GetTtsVoices { model } => return print_tts_voices(model).await,
+        Command::Talk(talk) => talk,
+    };
 
     if !talk.runs_on_cli() {
         return Err(anyhow::anyhow!(
