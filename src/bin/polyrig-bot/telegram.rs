@@ -539,34 +539,8 @@ async fn do_talk_voice_with_dialogue(
     do_talk(bot, dialogue, my_state, user_message, talk).await
 }
 
-/// Builds a WAV header for 16-bit mono PCM audio at the given sample rate.
-fn wav_header(data_len: usize, sample_rate: u32) -> Vec<u8> {
-    let bits_per_sample: u16 = 16;
-    let num_channels: u16 = 1;
-    let byte_rate = sample_rate * u32::from(num_channels) * u32::from(bits_per_sample) / 8;
-    let block_align = num_channels * bits_per_sample / 8;
-    let data_size = data_len as u32;
-    let chunk_size = 36 + data_size;
-
-    let mut hdr = Vec::with_capacity(44);
-    hdr.extend_from_slice(b"RIFF");
-    hdr.extend_from_slice(&chunk_size.to_le_bytes());
-    hdr.extend_from_slice(b"WAVE");
-    hdr.extend_from_slice(b"fmt ");
-    hdr.extend_from_slice(&16u32.to_le_bytes()); // subchunk1 size
-    hdr.extend_from_slice(&1u16.to_le_bytes()); // PCM
-    hdr.extend_from_slice(&num_channels.to_le_bytes());
-    hdr.extend_from_slice(&sample_rate.to_le_bytes());
-    hdr.extend_from_slice(&byte_rate.to_le_bytes());
-    hdr.extend_from_slice(&block_align.to_le_bytes());
-    hdr.extend_from_slice(&bits_per_sample.to_le_bytes());
-    hdr.extend_from_slice(b"data");
-    hdr.extend_from_slice(&data_size.to_le_bytes());
-    hdr
-}
-
 /// Generates audio from text using OpenRouter TTS and sends it as a voice message.
-/// `tts_format` is "mp3" or "pcm" — determines the response format and output file type.
+/// `tts_format` is "mp3" or "pcm": determines the response format and output file type.
 async fn send_voice_reply(
     bot: Bot,
     chat_id: ChatId,
@@ -601,16 +575,30 @@ async fn send_voice_reply(
 
     match tts_result {
         Ok(Ok(audio_data)) => {
-            let voice_file = if is_pcm {
-                // Gemini TTS returns raw PCM (16-bit, 24000 Hz, mono); wrap in WAV header.
-                let mut wav = wav_header(audio_data.len(), 24000);
-                wav.extend_from_slice(&audio_data);
-                InputFile::memory(wav).file_name("reply.wav")
+            let voice = if is_pcm {
+                // Gemini TTS returns raw PCM (16-bit, 24 kHz, mono); Telegram
+                // expects Ogg/Opus for voice messages, so re-encode first.
+                match crate::opus_ogg::pcm_to_ogg_opus(&audio_data) {
+                    Ok(ogg) => Some((
+                        InputFile::memory(ogg.data).file_name("reply.ogg"),
+                        Some(ogg.duration_secs),
+                    )),
+                    Err(e) => {
+                        log::error!("Ogg/Opus encoding failed, skipping voice reply: {e}");
+                        None
+                    }
+                }
             } else {
-                InputFile::memory(audio_data).file_name("reply.mp3")
+                Some((InputFile::memory(audio_data).file_name("reply.mp3"), None))
             };
-            if let Err(e) = bot.send_voice(chat_id, voice_file).await {
-                log::error!("Failed to send voice reply: {}", e);
+            if let Some((voice_file, duration)) = voice {
+                let mut send = bot.send_voice(chat_id, voice_file);
+                if let Some(secs) = duration {
+                    send = send.duration(secs);
+                }
+                if let Err(e) = send.await {
+                    log::error!("Failed to send voice reply: {}", e);
+                }
             }
         }
         Ok(Err(e)) => {

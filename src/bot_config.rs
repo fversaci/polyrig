@@ -21,7 +21,8 @@ use crate::config;
 
 /// Voice used as a fallback when the configured TTS model has no
 /// discoverable voices and `tts_voice` is not set in the configuration.
-pub const DEFAULT_TTS_VOICE: &str = "en-US-Harper:MAI-Voice-2.1";
+/// A Gemini TTS voice name (matches the default TTS model).
+pub const DEFAULT_TTS_VOICE: &str = "Charon";
 
 /// Bot defaults loaded from `defaults.toml` in the config directory.
 ///
@@ -47,11 +48,11 @@ fn default_transcription_model() -> String {
 }
 
 pub fn default_tts_model() -> String {
-    "microsoft/mai-voice-2.1-flash".to_string()
+    "google/gemini-3.8-flash-lite-tts".to_string()
 }
 
 fn default_tts_format() -> String {
-    "mp3".to_string()
+    "pcm".to_string()
 }
 
 fn default_max_tts_tokens() -> u64 {

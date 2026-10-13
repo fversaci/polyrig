@@ -5,18 +5,18 @@ id_whitelist = []
 
 # Optional: override default TTS model (OpenRouter).
 # List the voices of any model with: polyrig get-tts-voices <model>
-# tts_model = "microsoft/mai-voice-2.1-flash"
+# tts_model = "google/gemini-3.8-flash-lite-tts"
 
 # Optional: override the TTS voice (varies by model).
 # If omitted, a random voice supported by the TTS model is picked for
 # each new conversation (requires the OpenRouter models API; falls back
-# to "en-US-Harper:MAI-Voice-2.1" when the lookup fails).
-# Voice is multilingual: en-US-Harper:MAI-Voice-2.1 speaks all 23 supported languages.
-# tts_voice = "en-US-Harper:MAI-Voice-2.1"
+# to "Charon" when the lookup fails).
+# Gemini TTS voices are multilingual: they speak the language of the text.
+# tts_voice = "Charon"
 
 # Optional: TTS response format ("mp3" or "pcm"). "mp3" can be sent to Telegram directly;
-# "pcm" gets wrapped in a WAV header (needed for Gemini TTS models).
-# tts_format = "mp3"
+# "pcm" (the default; what Gemini TTS models output) is encoded to Ogg/Opus before sending.
+# tts_format = "pcm"
 
 # Optional: maximum output tokens for TTS generation.
 # max_tts_tokens = 10000

@@ -20,6 +20,7 @@ use rig_core::providers::openrouter;
 use rig_core::{agent::Agent, message::Message};
 use teloxide::{dispatching::dialogue::InMemStorage, prelude::*};
 
+mod opus_ogg;
 mod telegram;
 
 #[derive(Clone)]

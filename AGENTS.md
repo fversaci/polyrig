@@ -85,8 +85,9 @@ Bot-specific settings:
 
 - `id_whitelist`: List of allowed Telegram user IDs. An empty list blocks all access; at least one ID must be present. Created automatically on first run from the bundled `defaults.toml.template`.
 - `transcription_model`: Model for voice message transcription (default: `nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b`).
-- `tts_model`: Model for voice reply generation (default: `microsoft/mai-voice-2.1-flash`).
-- `tts_voice`: Optional voice name for TTS output. When omitted, a random voice supported by the TTS model is picked for each new conversation (requires the OpenRouter models API; falls back to `en-US-Harper:MAI-Voice-2.1` on failure). Available voices for a model can be listed with `polyrig get-tts-voices [MODEL]`.
+- `tts_model`: Model for voice reply generation (default: `google/gemini-3.8-flash-lite-tts`, which outputs raw PCM).
+- `tts_format`: TTS response format, "mp3" or "pcm" (default: "pcm"). PCM output is encoded to Ogg/Opus before being sent to Telegram.
+- `tts_voice`: Optional voice name for TTS output. When omitted, a random voice supported by the TTS model is picked for each new conversation (requires the OpenRouter models API; falls back to `Charon` on failure). Available voices for a model can be listed with `polyrig get-tts-voices [MODEL]`.
 
 ## Architecture & Data Flow
 
@@ -219,6 +220,7 @@ src/bin/
     └── view_markdown.rs            # Interactive scrollable markdown viewer
 └── polyrig-bot/
     ├── main.rs                     # Bot entry point, config loading
+    ├── opus_ogg.rs                 # PCM to Ogg/Opus encoder for voice replies
     └── telegram.rs                 # Bot state machine and handlers
 conf/
 ├── talks.toml                      # Bundled talks template (embedded; copied on first run)
@@ -236,6 +238,8 @@ Key crates:
 - **`rig-core`**: LLM abstraction layer (OpenRouter provider). Supports chat, transcription, and TTS/audio generation.
 - **`async-openai`**: Direct OpenAI API client (for speech-to-text binary).
 - **`teloxide`**: Telegram bot framework.
+- **`opus`**: Opus encoder (libopus bindings) used to re-encode PCM TTS output.
+- **`ogg`**: Ogg container muxing for Opus voice replies.
 - **`clap`**: CLI argument parsing (with derive macros).
 - **`rustyline`**: Readline-like input for CLI.
 - **`tokio`**: Async runtime (full features).

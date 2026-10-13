@@ -295,16 +295,16 @@ The bot is built on [teloxide](https://docs.rs/teloxide), which provides a DSL f
 pub struct BotConfig {                          // Defined in the shared library (src/bot_config.rs)
     id_whitelist: HashSet<ChatId>,  // Empty list blocks all access
     transcription_model: String,    // Default: nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b
-    tts_model: String,              // Default: microsoft/mai-voice-2.1-flash
+    tts_model: String,              // Default: google/gemini-3.8-flash-lite-tts (outputs pcm)
     tts_voice: Option<String>,      // None: random supported voice per conversation
-    tts_format: String,             // Default: "mp3"
+    tts_format: String,             // Default: "pcm"
     max_tts_tokens: u64,            // Default: 10000
 }
 ```
 
 Config is loaded from `defaults.toml` in the config directory (`~/.config/polyrig/` on Linux) at startup via `bot_config::get_conf()`. On first run `config::ensure_config()` creates it from the bundled `defaults.toml.template` (embedded with `include_str!`), migrating a legacy local `conf/defaults.toml` if present so existing whitelist settings are kept. Existing files are never overwritten.
 
-When `tts_voice` is `None`, a random voice is picked at conversation start (`start_talk`) from the TTS model's `supported_voices` (via `polyrig::models::supported_tts_voices`, which queries `GET /api/v1/models?output_modalities=speech`). On API failure or an empty voice list the bot logs a warning and falls back to `bot_config::DEFAULT_TTS_VOICE` (`"en-US-Harper:MAI-Voice-2.1"`). The chosen voice stays fixed for the whole conversation.
+When `tts_voice` is `None`, a random voice is picked at conversation start (`start_talk`) from the TTS model's `supported_voices` (via `polyrig::models::supported_tts_voices`, which queries `GET /api/v1/models?output_modalities=speech`). On API failure or an empty voice list the bot logs a warning and falls back to `bot_config::DEFAULT_TTS_VOICE` (`"Charon"`). The chosen voice stays fixed for the whole conversation.
 
 ### 4.3 State
 
@@ -439,7 +439,7 @@ At `telegram.rs:500-534`. Generates TTS audio and sends it as a voice message:
 
 1. Spawns TTS generation in a background task.
 2. Creates an `openrouter::AudioGenerationModel` from `my_state.tts_model`.
-3. Sends the audio bytes as `InputFile::memory(...)` with filename `reply.mp3`.
+3. Sends the audio bytes as `InputFile::memory(...)`: for the `mp3` format the bytes are sent directly with filename `reply.mp3`; for the `pcm` format (raw 16-bit 24 kHz mono, e.g. from Gemini TTS models) they are first encoded to an Ogg/Opus stream by `opus_ogg::pcm_to_ogg_opus()` and sent as `reply.ogg` with an explicit duration attribute (computed from the PCM length). On encoding failure the voice reply is skipped and the error logged.
 
 The voice used (`my_state.tts_voice`) is resolved once per conversation in `start_talk()`: either the explicit `tts_voice` from `defaults.toml`, or a random voice drawn from the model's `supported_voices` (with a warning + `DEFAULT_TTS_VOICE` fallback if the lookup fails).
 
@@ -682,13 +682,13 @@ model = "google/gemini-2.5-flash-lite-preview-09-2025"
 ```toml
 id_whitelist = []           # Set to your Telegram ChatId
 transcription_model = "nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b"
-tts_model = "microsoft/mai-voice-2.1-flash"
-tts_format = "mp3"
+tts_model = "google/gemini-3.8-flash-lite-tts"
+tts_format = "pcm"
 max_tts_tokens = 10000
 # tts_voice: optional. When omitted, a random voice supported by the
 # TTS model is picked for each new conversation (fallback:
-# "en-US-Harper:MAI-Voice-2.1" if the models API fails).
-# tts_voice = "en-US-Harper:MAI-Voice-2.1"
+# "Charon" if the models API fails).
+# tts_voice = "Charon"
 ```
 
 List the voices supported by any TTS model with `polyrig get-tts-voices [MODEL]` (defaults to the configured `tts_model`).
